@@ -1,0 +1,62 @@
+name: Fetch PaperMC CI
+
+on:
+  schedule:
+    - cron: "15 * * * *"
+  workflow_dispatch:
+
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    outputs:
+      PAPER_BUILD_VERSION: ${{ steps.paper-commit.outputs.PAPER_BUILD_VERSION }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+        with:
+          persist-credentials: false # otherwise, the token used is the GITHUB_TOKEN, instead of your personal access token.
+          fetch-depth: 0 # otherwise, there would be errors pushing refs to the destination repository.
+
+      - uses: actions/setup-go@v2
+      - name: Fetch PaperMC
+        id: go-fetch
+        run: |-
+          go run main.go
+          EXIST_ENV_FILE=$(if [ -f ".env.tmp" ];then echo 1; else echo 0; fi)
+          echo "EXIST_ENV_FILE: $EXIST_ENV_FILE"
+          echo "::set-output name=EXIST_ENV_FILE::${EXIST_ENV_FILE}"
+
+      - name: Commit
+        if: ${{ steps.go-fetch.outputs.EXIST_ENV_FILE == 1 }}
+        run: |-
+          source .env.tmp
+          git config --global user.email "suixinio@163.com" && git config --global user.name "Bot"
+          git diff 
+          git add papermc-data/papermc-build.json && git commit -m ":memo: update ${PAPER_BUILD_VERSION}-${PAPER_BUILD_NUMBER} papermc-build.json" || exit 0
+
+      - name: Push Main
+        if: ${{ steps.go-fetch.outputs.EXIST_ENV_FILE == 1 }}
+        uses: ad-m/github-push-action@master
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          branch: main
+
+      - name: Commit
+        if: ${{ steps.go-fetch.outputs.EXIST_ENV_FILE == 1 }}
+        id: git-commit
+        shell: bash
+        run: |-
+          source .env.tmp
+          git checkout ver/${PAPER_BUILD_VERSION} 2>/dev/null || git checkout -b ver/${PAPER_BUILD_VERSION}
+          echo "::set-output name=PAPER_BUILD_VERSION::ver/${PAPER_BUILD_VERSION}"
+          mv .env.tmp .env
+          git diff
+          git add .env && git commit -m ":memo: update ${PAPER_BUILD_VERSION}-${PAPER_BUILD_NUMBER} .env" || exit 0
+
+      - name: Push Ver
+        if: ${{ steps.go-fetch.outputs.EXIST_ENV_FILE == 1 }}
+        uses: ad-m/github-push-action@master
+        with:
+          github_token: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
+          branch: ${{ steps.git-commit.outputs.PAPER_BUILD_VERSION }}

@@ -1,12 +1,12 @@
 FROM azul/zulu-openjdk-alpine:17-jre AS build
 RUN apk add curl jq
 
-ARG version=1.18.2
-
 WORKDIR /opt/minecraft
 COPY scripts/getpaperserver.sh /
+COPY .env /
+
 RUN chmod +x /getpaperserver.sh
-RUN /getpaperserver.sh ${version}
+RUN /getpaperserver.sh
 
 FROM azul/zulu-openjdk-alpine:17-jre AS runtime
 
